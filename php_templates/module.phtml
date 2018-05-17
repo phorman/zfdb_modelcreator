@@ -1,0 +1,103 @@
+<?php
+/**
+ * @link      http://github.com/zendframework/ZendSkeletonApplication for the canonical source repository
+ * @copyright Copyright (c) 2005-2016 Zend Technologies USA Inc. (http://www.zend.com)
+ * @license   http://framework.zend.com/license/new-bsd New BSD License
+ */
+namespace Application;
+
+use Zend\Db\Adapter\AdapterInterface;
+use Zend\Db\ResultSet\ResultSet;
+use Zend\Db\TableGateway\TableGateway;
+use Zend\Console\Request as ConsoleRequest;
+
+use Zend\Mvc\MvcEvent;
+
+use Application\Controller\Plugin;
+
+use Application\Controller\Plugin\AclFactory as AclPluginFactory;
+use Application\Controller\Plugin\AddressFactory;
+use Application\Controller\Plugin\AuthorizeFactory;
+use Application\Controller\Plugin\GravatarFactory;
+use Application\Controller\Plugin\PricingFactory;
+use Application\Controller\Plugin\NotesFactory;
+use Application\Controller\Plugin\SettingsFactory;
+
+use Application\View\Helper\AclFactory as AclHelperFactory;
+use Application\View\Helper\LocationStatusFactory;
+use Application\View\Helper\ShareFactory;
+
+/*** START USE MODEL STATEMENTS */
+{{use_modules}}
+/*** END USE MODEL STATEMENTS */
+
+use LayoutManager\Listeners\LayoutManager;
+use Authorization\Listeners\AuthorizationListener;
+
+class Module
+{
+
+    const VERSION = '3.0.2dev';
+
+    public function onBootstrap(MvcEvent $e)
+    {
+        $serviceManager = $e->getApplication()->getServiceManager();
+        $eventManager = $e->getApplication()->getEventManager();
+        $request = $e->getApplication()->getRequest();
+
+        if (!$request instanceof ConsoleRequest) {
+            $layoutManager = new LayoutManager(['header','footer']);
+            $layoutManager->setNameSpace(__NAMESPACE__);
+            $layoutManager->setDependency('settings', $serviceManager->get('ControllerPluginManager')->get('settings'));
+            $layoutManager->setDependency('authListener', $serviceManager->get(AuthorizationListener::class));
+            $layoutManager->attach($eventManager);
+        }
+    }
+
+    public function getServiceConfig()
+    {
+        return [
+            'aliases' => [
+                'cache' => Factory\FileCacheFactory::class
+            ],
+            'factories' => [
+                Factory\FileCacheFactory::class => Factory\FileCacheFactory::class,
+//** START MODELS SERVICE */
+{{service_models}}
+//** END MODELS SERVICE */
+            ]
+        ];
+    }
+
+    public function getViewHelperConfig()
+    {
+        return [
+            'invokables' => [
+                'gravatar' => View\Helper\Gravatar::class,
+            ],
+            'factories' => [
+                'acl' => AclHelperFactory::class,
+            ]
+        ];
+    }
+
+    public function getControllerPluginConfig()
+    {
+        return [
+            'invokables' => [
+                'dump' => Controller\Plugin\Dump::class,
+            ],
+            'factories' => [
+                'acl' => AclPluginFactory::class,
+                'authorize' => AuthorizeFactory::class,
+                'settings' => SettingsFactory::class,
+                'gravatar' => GravatarFactory::class,
+            ]
+        ];
+    }
+
+    public function getConfig()
+    {
+        return include __DIR__ . '/../config/module.config.php';
+    }
+}

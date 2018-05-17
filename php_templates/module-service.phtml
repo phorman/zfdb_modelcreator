@@ -1,0 +1,11 @@
+                Model\{{model}}::class => function ($container) {
+                    $dbAdapter = $container->get(AdapterInterface::class);
+                    $resultSetPrototype = new ResultSet();
+                    $resultSetPrototype->setArrayObjectPrototype(new {{model}}());
+                    return new TableGateway('{{gateway}}', $dbAdapter, null, $resultSetPrototype);
+                },
+                Model\{{model_table}}::class => function ($container) {
+                    $tableGateway = $container->get(Model\{{model}}::class);
+                    $table = new {{model_table}}($tableGateway);
+                    return $table;
+                },
