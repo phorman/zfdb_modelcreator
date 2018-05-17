@@ -11,18 +11,18 @@ class buildModels
 
     function __construct($credentials)
     {
-        $this->table = ($_GET['table']) ? $_GET['table'] : 'user';
+        $this->table = (array_key_exists('table', $_GET)) ? $_GET['table'] : 'user';
 
-        $this->dbConnection = mysqli_connect($credentials['server'], $credentials['user'], $credentials['password'], $this->credentials['database']);
+        $this->dbConnection = mysqli_connect($credentials['server'], $credentials['user'], $credentials['password'], $credentials['database']);
 
         // Check connection
         if (!$this->dbConnection) {
             die("Connection failed: " . mysqli_connect_error());
         }
 
-        $this->pascalCaseName = $this->formatTableName();
+        $this->formatTableName();
 
-        $this->fieldNames = $this->getFieldNames($dbConnection);
+        $this->fieldNames = $this->getFieldNames($this->dbConnection);
 
         $this->createModelFile();
 
@@ -40,7 +40,7 @@ class buildModels
         foreach ($tableNameArray as $value) {
             $formattedTableName .= ucfirst($value);
         }
-        
+
         $this->pascalCaseName = $formattedTableName;
     }
 
@@ -68,15 +68,13 @@ class buildModels
 
     function loadTemplate($filename, $data) {
         try {
-            $handle = fopen("php_templates/{$this->pascalCaseName}.phtml", 'r') or die('Cannot open file:  php_templates/'.$this->pascalCaseName); //implicitly creates file
-            $template = file_get_contents($handle);
-            fclose($handle);
+            $template = file_get_contents("php_templates/$filename.phtml");
         } catch (Exception $e) {
             echo "Unable to access file system";
         }
     
         foreach($data as $key => $field) {
-            $template = str_replace("{{$key}}",$field,$template);
+            $template = preg_replace("/\{\{$key\}\}/sim",$field,$template);
         }
             
         return $template;
@@ -85,13 +83,13 @@ class buildModels
     /**
      * @todo Have the system write to the appropriate directory and appropriate file
      */
-    function saveFile($data) {
+    function saveFile($filename, $data) {
         try {
-            $handle = fopen($this->pascalCaseName, 'w') or die('Cannot open file:  ' . $this->pascalCaseName); //implicitly creates file
-            fwrite($handle,$data);
+            $handle = fopen($filename, 'w') or die('Cannot open file:  ' . $filename); //implicitly creates file
+            fwrite($handle, $data);
             fclose($handle);
         } catch (Exception $e) {
-            echo "Unable to save file: ", $this->pascalCaseName;
+            echo "Unable to save file: ", $filename;
         }
     }
 
@@ -104,14 +102,16 @@ class buildModels
         $modelProperties = "";
         
         foreach ($this->fieldNames as $value) {
-            $modelProperties .= "    public \$". $value ."; \n";    
+            $modelProperties .= "    public \$". $value ."; \r\n";    
         }
     
         $data = ['table' => $this->pascalCaseName, 'properties' => $modelProperties];
     
         $output = $this->loadTemplate('model',$data);
     
-        saveFile($this->pascalCaseName, $output);
+        $this->saveFile('module/Application/src/model/'.$this->pascalCaseName . ".php", $output);
+
+        echo "Created Model: " .$this->pascalCaseName . "<br>\n";
     }
 
     function createTableFile() {
@@ -119,17 +119,21 @@ class buildModels
 
         $output = $this->loadTemplate('table', $data);
 
-        saveFile($this->pascalCaseName . 'Table.php', $output);
+        $this->saveFile('module/Application/src/model/'. $this->pascalCaseName . 'Table.php', $output);
+
+        echo "Created Table: " .$this->pascalCaseName . "<br>\n";
     }
     
-    function createModuleFile($dbConnection) {
-        $output = $this->loadTemplate('module', $output);
+    function createModuleFile() {
+        $output = $this->loadTemplate('module', []);
 
-        $this->addUseStatement($table, $output);
+        $output = $this->addUseStatement($output);
 
-        $this->addServiceModel($table, $output);
+        $output = $this->addServiceModel($output);
 
-        $this->saveFile('module.phtml', $output);
+        $this->saveFile('module/Application/Module.php', $output);
+
+        echo "Created Module: " .$this->pascalCaseName . "<br>\n";
     }   
     
     function addUseStatement($output) {
@@ -176,4 +180,4 @@ class buildModels
  * INSTANCIATE THE CLASS
  */
 
-$test = new buildModels();
+$test = new buildModels($credentials);
