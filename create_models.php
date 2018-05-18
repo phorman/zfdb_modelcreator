@@ -5,12 +5,15 @@ require_once('credentials.php');
 class buildModels 
 {
     var $dbConnection;
+    var $database;
     var $table;
     var $pascalCaseName;
     var $fieldNames;
 
     function __construct($credentials)
     {
+        $this->database = $credentials['database'];
+
         $this->table = (array_key_exists('table', $_GET)) ? $_GET['table'] : 'user';
 
         $this->dbConnection = mysqli_connect($credentials['server'], $credentials['user'], $credentials['password'], $credentials['database']);
@@ -20,15 +23,17 @@ class buildModels
             die("Connection failed: " . mysqli_connect_error());
         }
 
-        $this->formatTableName();
+        foreach ($this->getTableNames() as $name) {
+            $this->table = $name;
 
-        $this->fieldNames = $this->getFieldNames($this->dbConnection);
+            $this->formatTableName()
+                 ->getFieldNames()
+                 ->createModelFile()
+                 ->createTableFile()
+                 ->createModuleFile();
 
-        $this->createModelFile();
-
-        $this->createTableFile();
-
-        $this->createModuleFile();
+            echo "-----------<br>\r\n";
+        }
 
         $this->dbConnection->close();
     }
@@ -42,9 +47,11 @@ class buildModels
         }
 
         $this->pascalCaseName = $formattedTableName;
+
+        return $this;
     }
 
-    function getFieldNames($conn) {
+    function getFieldNames() {
         $query = "SHOW COLUMNS FROM ". $this->table;
         
         $fieldArray = array();
@@ -59,7 +66,31 @@ class buildModels
             /* free result set */
             $result->free();
             
-            return $fieldArray;
+            $this->fieldNames = $fieldArray;
+        } else {
+            echo "No Data";
+            $fieldNames = false;
+        }
+
+        return $this;
+    }
+
+    function getTableNames() {
+        $query = "SELECT `table_name` AS 'table' FROM information_schema.tables WHERE table_schema = '". $this->database ."'";
+
+        $tableArray = array();
+        
+        if ($result = $this->dbConnection->query($query)) {
+        
+            /* fetch associative array */
+            while ($row = $result->fetch_assoc()) {
+                $tableArray[] = $row['table'];
+            }
+        
+            /* free result set */
+            $result->free();
+            
+            return $tableArray;
         } else {
             echo "No Data";
             return false;
@@ -67,8 +98,12 @@ class buildModels
     }
 
     function loadTemplate($filename, $data) {
+        $file = "php_templates/$filename.phtml";
+
+        $file = (strstr($filename, 'Application')) ? $filename : $file;
+
         try {
-            $template = file_get_contents("php_templates/$filename.phtml");
+            $template = file_get_contents($file);
         } catch (Exception $e) {
             echo "Unable to access file system";
         }
@@ -112,6 +147,8 @@ class buildModels
         $this->saveFile('module/Application/src/model/'.$this->pascalCaseName . ".php", $output);
 
         echo "Created Model: " .$this->pascalCaseName . "<br>\n";
+
+        return $this;
     }
 
     function createTableFile() {
@@ -122,10 +159,18 @@ class buildModels
         $this->saveFile('module/Application/src/model/'. $this->pascalCaseName . 'Table.php', $output);
 
         echo "Created Table: " .$this->pascalCaseName . "<br>\n";
+
+        return $this;
     }
     
     function createModuleFile() {
-        $output = $this->loadTemplate('module', []);
+        $filename = 'module';
+
+        if (file_exists('module/Application/Module.php')) {
+            $filename  = 'module/Application/Module.php';
+        }
+
+        $output = $this->loadTemplate($filename, []);
 
         $output = $this->addUseStatement($output);
 
@@ -134,42 +179,45 @@ class buildModels
         $this->saveFile('module/Application/Module.php', $output);
 
         echo "Created Module: " .$this->pascalCaseName . "<br>\n";
+
+        return $this;
     }   
     
     function addUseStatement($output) {
-        $useFilter = '%[/*]{4} START USE MODEL STATEMENTS [*/]{2}(.*?)[/*]{4} END USE MODEL STATEMENTS [*/]{2}%sim';
+        $useFilter = '%[\r\n]*[/*]{4} START USE MODEL STATEMENTS [*/]{2}(.*?)[/*]{4} END USE MODEL STATEMENTS [*/]{2}[\r\n]*%sim';
 
         //store existing use statements
-        $useStatements = (preg_match($useFilter, $output, $found)) ? $found[1] : '';
+        $useStatements = (preg_match($useFilter, $output, $found)) ? trim($found[1]) : '';
 
-        $newStatements   = "use Application\Model\\" . $this->pascalCaseName . ";\n";
-        $newStatements  .= "use Application\Model\\" . $this->pascalCaseName . "Table;\n";
+        $newStatements   = "use Application\Model\\" . $this->pascalCaseName . ";\r\n";
+        $newStatements  .= "use Application\Model\\" . $this->pascalCaseName . "Table;\r\n";
 
-        $newUse  = "/*** START USE MODEL STATEMENTS */\n";
-        $newUse .= $useStatements ."\n";
+        $newUse  = "\r\n\r\n/*** START USE MODEL STATEMENTS */\r\n";
+        $newUse .= $useStatements ."\r\n";
         $newUse .= $newStatements;
-        $newUse .="/*** END USE MODEL STATEMENTS */\n";
+        $newUse .="/*** END USE MODEL STATEMENTS */\r\n\r\n";
         
         return preg_replace($useFilter, $newUse, $output);
     }
 
     function addServiceModel($output) {
-        $serviceFilter = '%[/*]{4} START MODELS SERVICE [*/]{2}(.*?)[/*]{4} END MODELS SERVICE [*/]{2}%sim'; 
+        $serviceFilter = '%[\r\n]*[/*]{3} START MODELS SERVICE [*/]{2}(.*?)[/*]{3} END MODELS SERVICE [*/]{2}[\r\n]*%sim';
 
         //store existing use statements
-        $currentServices = (preg_match($serviceFilter, $output, $found)) ? $found[1] : '';
+        $currentServices = (preg_match($serviceFilter, $output, $found)) ? trim($found[1]) : '';
 
         $data = [
             'model' => $this->pascalCaseName,
-            'model_table' => $this->pascalCaseName . "Table"
+            'model_table' => $this->pascalCaseName . "Table",
+            'gateway' => strtolower($this->table)
         ];
 
         $newService = $this->loadTemplate('module-service', $data);
         
-        $newOutput = "//** START MODELS SERVICE */\n";
-        $newOutput .= $currentServices ."\n";
+        $newOutput = "\r\n/** START MODELS SERVICE */\r\n";
+        $newOutput .= $currentServices;
         $newOutput .= $newService;
-        $newOutput .="/*** END MODELS SERVICE */\n";
+        $newOutput .="\r\n/** END MODELS SERVICE */\r\n\r\n";
             
         return preg_replace($serviceFilter, $newOutput, $output);
     }

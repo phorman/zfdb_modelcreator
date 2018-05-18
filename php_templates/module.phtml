@@ -28,7 +28,6 @@ use Application\View\Helper\LocationStatusFactory;
 use Application\View\Helper\ShareFactory;
 
 /*** START USE MODEL STATEMENTS */
-{{use_modules}}
 /*** END USE MODEL STATEMENTS */
 
 use LayoutManager\Listeners\LayoutManager;
@@ -62,8 +61,8 @@ class Module
             ],
             'factories' => [
                 Factory\FileCacheFactory::class => Factory\FileCacheFactory::class,
-//** START MODELS SERVICE */
-//** END MODELS SERVICE */
+                /** START MODELS SERVICE */
+                /** END MODELS SERVICE */
             ]
         ];
     }
